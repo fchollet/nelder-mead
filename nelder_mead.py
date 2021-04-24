@@ -1,14 +1,14 @@
 import copy
 
 '''
-    Pure Python/Numpy implementation of the Nelder-Mead algorithm.
+    Pure Python/NumPy implementation of the Nelder-Mead algorithm.
     Reference: https://en.wikipedia.org/wiki/Nelder%E2%80%93Mead_method
 '''
 
 
 def nelder_mead(f, x_start,
-                step=0.1, no_improve_thr=10e-6,
-                no_improv_break=10, max_iter=0,
+                step=0.1, improvement_threshold=10e-6,
+                max_iterations_since_improvement=10, max_iterations=0,
                 alpha=1., gamma=2., rho=-0.5, sigma=0.5):
     '''
         @param f (function): function to optimize, must return a scalar score
@@ -21,89 +21,85 @@ def nelder_mead(f, x_start,
             Set it to 0 to loop indefinitely.
         @alpha, gamma, rho, sigma (floats): parameters of the algorithm
             (see Wikipedia page for reference)
-
         return: tuple (best parameter array, best score)
     '''
 
-    # init
-    dim = len(x_start)
-    prev_best = f(x_start)
-    no_improv = 0
-    res = [[x_start, prev_best]]
+    # initialization
+    dimensions = len(x_start)
+    previous_best = f(x_start)
+    iterations_since_improvement = 0
+    record = [[x_start, previous_best]]
 
-    for i in range(dim):
+    for i in range(dimensions):
         x = copy.copy(x_start)
-        x[i] = x[i] + step
+        x[i] += step
         score = f(x)
-        res.append([x, score])
+        record.append([x, score])
 
-    # simplex iter
-    iters = 0
-    while 1:
-        # order
-        res.sort(key=lambda x: x[1])
-        best = res[0][1]
-
-        # break after max_iter
-        if max_iter and iters >= max_iter:
-            return res[0]
-        iters += 1
-
-        # break after no_improv_break iterations with no improvement
-        print '...best so far:', best
-
-        if best < prev_best - no_improve_thr:
-            no_improv = 0
-            prev_best = best
-        else:
-            no_improv += 1
-
-        if no_improv >= no_improv_break:
-            return res[0]
+    # simplex iteration
+    iterations = 0
+    while(True):
+        # order the record of [x, score] pairs by score
+        record.sort(key=lambda x: x[1])
+        best = record[0][1]
+        
+        print('...best so far:', best)
+        
+        # return the least-scoring pair after too many iterations total
+        if max_iterations and iterations >= max_iterations: return record[0]
+        iterations += 1
+        
+        # check if the score has improved (i.e., decreased)
+        if best < previous_best - improvement_threshold:
+            iterations_since_improvement = 0
+            previous_best = best
+        else: iterations_since_improvement += 1
+        
+        # return the least-scoring pair after too many iterations without improvement
+        if iterations_since_improvement >= max_iterations_since_improvement: return record[0]
 
         # centroid
-        x0 = [0.] * dim
-        for tup in res[:-1]:
-            for i, c in enumerate(tup[0]):
-                x0[i] += c / (len(res)-1)
+        x0 = [0 for _ in range(dimensions)]
+        for pair in record[:-1]:
+            for i, c in enumerate(pair[0]): x0[i] += c / (len(record)-1)
 
         # reflection
-        xr = x0 + alpha*(x0 - res[-1][0])
-        rscore = f(xr)
-        if res[0][1] <= rscore < res[-2][1]:
-            del res[-1]
-            res.append([xr, rscore])
+        x_reflection = x0 + alpha*(x0 - record[-1][0])
+        reflection_score = f(x_reflection)
+        if best <= reflection_score < record[-2][1]:
+            del record[-1]
+            record.append([x_reflection, reflection_score])
             continue
 
         # expansion
-        if rscore < res[0][1]:
-            xe = x0 + gamma*(x0 - res[-1][0])
-            escore = f(xe)
-            if escore < rscore:
-                del res[-1]
-                res.append([xe, escore])
+        if reflection_score < best:
+            x_expansion = x0 + gamma*(x0 - record[-1][0])
+            expansion_score = f(x_expansion)
+            if expansion_score < reflection_score:
+                del record[-1]
+                record.append([x_expansion, expansion_score])
                 continue
             else:
-                del res[-1]
-                res.append([xr, rscore])
+                del record[-1]
+                record.append([x_reflection, reflection_score])
                 continue
 
         # contraction
-        xc = x0 + rho*(x0 - res[-1][0])
-        cscore = f(xc)
-        if cscore < res[-1][1]:
-            del res[-1]
-            res.append([xc, cscore])
+        x_contraction = x0 + rho*(x0 - record[-1][0])
+        contraction_score = f(x_contraction)
+        if contraction_score < record[-1][1]:
+            del record[-1]
+            record.append([x_contraction, contraction_score])
             continue
 
         # reduction
-        x1 = res[0][0]
-        nres = []
-        for tup in res:
-            redx = x1 + sigma*(tup[0] - x1)
+        x1 = record[0][0]
+        new_record = []
+        for pair in record:
+            redx = x1 + sigma*(pair[0] - x1)
             score = f(redx)
-            nres.append([redx, score])
-        res = nres
+            new_record.append([redx, score])
+        record = new_record
 
 
 if __name__ == "__main__":
@@ -111,7 +107,6 @@ if __name__ == "__main__":
     import math
     import numpy as np
 
-    def f(x):
-        return math.sin(x[0]) * math.cos(x[1]) * (1. / (abs(x[2]) + 1))
+    def f(x): return math.sin(x[0]) * math.cos(x[1]) * (1. / (abs(x[2]) + 1))
 
-    print nelder_mead(f, np.array([0., 0., 0.]))
+    print(nelder_mead(f, np.array([0., 0., 0.])))
